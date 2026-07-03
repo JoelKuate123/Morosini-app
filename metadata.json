@@ -1,0 +1,6 @@
+{
+  "name": "Watermark Image App",
+  "description": "An application to add a watermark to an image and download the result. The watermark is placed in the bottom-right corner.",
+  "requestFramePermissions": [],
+  "majorCapabilities": []
+}
