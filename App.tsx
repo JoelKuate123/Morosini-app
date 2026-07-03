@@ -63,6 +63,13 @@ interface ImageItem {
     name: string;
 }
 
+interface AspectRatioPreset {
+    id: string;
+    label: string;
+    ratio: number | null;
+    description: string;
+}
+
 const POSITIONS: { id: WatermarkPosition; label: string }[] = [
     { id: 'top-left', label: 'Haut Gauche' },
     { id: 'top-right', label: 'Haut Droite' },
@@ -70,6 +77,14 @@ const POSITIONS: { id: WatermarkPosition; label: string }[] = [
     { id: 'bottom-right', label: 'Bas Droite' },
     { id: 'bottom-center', label: 'Bas Centré' },
     { id: 'center', label: 'Centré' },
+];
+
+const PRESETS: AspectRatioPreset[] = [
+    { id: 'original', label: 'Original', ratio: null, description: 'Résolution native de la photo' },
+    { id: '1:1', label: '1:1 (Instagram)', ratio: 1, description: 'Format carré post classique' },
+    { id: '4:5', label: '4:5 (Instagram)', ratio: 4/5, description: 'Format portrait optimal' },
+    { id: '9:16', label: '9:16 (Story / Reel)', ratio: 9/16, description: 'Format plein écran mobile' },
+    { id: '16:9', label: '16:9 (Paysage)', ratio: 16/9, description: 'Format standard paysage' },
 ];
 
 const INITIAL_STATE: WatermarkState = {
@@ -101,6 +116,33 @@ const DEFAULT_WATERMARK_URL = `data:image/svg+xml;base64,${btoa(unescape(encodeU
 
 
 // --- HELPERS ---
+
+interface CropBounds {
+    sourceX: number;
+    sourceY: number;
+    targetWidth: number;
+    targetHeight: number;
+}
+
+const getCropBounds = (width: number, height: number, ratio: number | null): CropBounds => {
+    if (!ratio) {
+        return { sourceX: 0, sourceY: 0, targetWidth: width, targetHeight: height };
+    }
+    let targetWidth = width;
+    let targetHeight = height;
+    if (width / height > ratio) {
+        // Wider than target ratio: crop sides
+        targetWidth = Math.round(height * ratio);
+        targetHeight = height;
+    } else {
+        // Taller than target ratio: crop top & bottom
+        targetWidth = width;
+        targetHeight = Math.round(width / ratio);
+    }
+    const sourceX = Math.round((width - targetWidth) / 2);
+    const sourceY = Math.round((height - targetHeight) / 2);
+    return { sourceX, sourceY, targetWidth, targetHeight };
+};
 
 const getWatermarkPreviewStyle = (state: WatermarkState): React.CSSProperties => {
     const style: React.CSSProperties = {
@@ -358,7 +400,8 @@ const LivePreview: React.FC<{
     onZoomIn: () => void;
     onZoomOut: () => void;
     onResetZoom: () => void;
-}> = ({ images, selectedId, onSelect, watermarkUrl, watermarkState, previewZoom, onZoomIn, onZoomOut, onResetZoom }) => {
+    activePreset: AspectRatioPreset;
+}> = ({ images, selectedId, onSelect, watermarkUrl, watermarkState, previewZoom, onZoomIn, onZoomOut, onResetZoom, activePreset }) => {
     const activeIndex = images.findIndex(img => img.id === selectedId);
     const activeImage = images[activeIndex] || null;
 
@@ -390,14 +433,23 @@ const LivePreview: React.FC<{
     return (
         <div className="relative w-full h-full bg-gray-100 rounded-lg overflow-hidden border border-gray-200 flex justify-center items-center min-h-[340px] group">
             <div 
-                className="w-full h-full transition-transform duration-200 ease-in-out flex items-center justify-center"
+                className="w-full h-full transition-transform duration-200 ease-in-out flex items-center justify-center p-4"
                 style={{ transform: `scale(${previewZoom})` }}
             >
-                <div className="relative max-w-full max-h-full p-4">
+                <div 
+                    className="relative overflow-hidden shadow-sm rounded bg-white flex items-center justify-center transition-all duration-200"
+                    style={{
+                        aspectRatio: activePreset.ratio || undefined,
+                        maxWidth: '100%',
+                        maxHeight: '360px',
+                        width: activePreset.ratio ? (activePreset.ratio >= 1 ? '100%' : 'auto') : 'auto',
+                        height: activePreset.ratio ? (activePreset.ratio < 1 ? '360px' : 'auto') : '360px',
+                    }}
+                >
                     <img 
                         src={activeImage.url} 
                         alt={activeImage.name} 
-                        className="max-h-[360px] w-auto object-contain select-none shadow-sm rounded bg-white" 
+                        className={`select-none pointer-events-none transition-all duration-200 ${activePreset.ratio ? 'w-full h-full object-cover' : 'max-h-[360px] w-auto object-contain'}`}
                     />
                     {watermarkUrl && (
                         <img 
@@ -475,6 +527,7 @@ const App: React.FC = () => {
   const [selectedImageId, setSelectedImageId] = useState<string | null>(null);
   const [watermarkType, setWatermarkType] = useState<'default' | 'custom'>('default');
   const [customWatermarkFile, setCustomWatermarkFile] = useState<File | null>(null);
+  const [selectedPresetId, setSelectedPresetId] = useState<string>('original');
   
   const [history, setHistory] = useState<WatermarkState[]>([INITIAL_STATE]);
   const [historyIndex, setHistoryIndex] = useState(0);
@@ -483,6 +536,10 @@ const App: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [downloadCount, setDownloadCount] = useState<number>(0);
   const [previewZoom, setPreviewZoom] = useState(1);
+
+  const activePreset = useMemo(() => {
+    return PRESETS.find(p => p.id === selectedPresetId) || PRESETS[0];
+  }, [selectedPresetId]);
 
   const selectedImage = useMemo(() => {
     return mainImages.find(img => img.id === selectedImageId) || null;
@@ -584,14 +641,29 @@ const App: React.FC = () => {
     const mainImg = await loadImage(imgItem.url);
     const watermarkImg = await loadImage(watermarkUrl);
 
+    // Get crop bounds based on preset ratio to maintain original high resolution
+    const crop = getCropBounds(mainImg.width, mainImg.height, activePreset.ratio);
+
     const canvas = document.createElement('canvas');
-    canvas.width = mainImg.width;
-    canvas.height = mainImg.height;
+    canvas.width = crop.targetWidth;
+    canvas.height = crop.targetHeight;
     const ctx = canvas.getContext('2d');
 
     if (!ctx) throw new Error("Impossible de créer le contexte de dessin 2D.");
 
-    ctx.drawImage(mainImg, 0, 0);
+    // Draw cropped portion of the original high-res image
+    ctx.drawImage(
+      mainImg,
+      crop.sourceX,
+      crop.sourceY,
+      crop.targetWidth,
+      crop.targetHeight,
+      0,
+      0,
+      crop.targetWidth,
+      crop.targetHeight
+    );
+    
     ctx.globalAlpha = state.opacity / 100;
 
     const padding = canvas.width * 0.02;
@@ -724,6 +796,28 @@ const App: React.FC = () => {
               
               <div className="space-y-5">
                 <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">Format / Réseau Social</label>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+                        {PRESETS.map(preset => (
+                            <button
+                                key={preset.id}
+                                type="button"
+                                onClick={() => setSelectedPresetId(preset.id)}
+                                className={`flex flex-col items-center justify-center p-2 rounded-lg border text-center transition-all select-none ${
+                                    selectedPresetId === preset.id
+                                        ? 'border-indigo-600 bg-indigo-50 text-indigo-700 ring-2 ring-indigo-100 font-semibold'
+                                        : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50 hover:border-gray-300'
+                                }`}
+                                title={preset.description}
+                            >
+                                <span className="text-xs font-semibold">{preset.label}</span>
+                                <span className="text-[9px] text-gray-400 mt-0.5 font-medium">{preset.id === 'original' ? 'Plein format' : preset.id}</span>
+                            </button>
+                        ))}
+                    </div>
+                </div>
+
+                <div>
                     <label className="block text-sm font-semibold text-gray-700 mb-2">Position du filigrane</label>
                     <div className="grid grid-cols-3 gap-1.5">
                         {POSITIONS.map(pos => (
@@ -770,6 +864,7 @@ const App: React.FC = () => {
                   onZoomIn={handleZoomIn}
                   onZoomOut={handleZoomOut}
                   onResetZoom={handleResetZoom}
+                  activePreset={activePreset}
               />
             </div>
             
