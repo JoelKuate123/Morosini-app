@@ -93,26 +93,8 @@ const INITIAL_STATE: WatermarkState = {
     scale: 18,  // Default to 18 as requested
 };
 
-// --- DEFAULT LOGO (SVG) ---
-const DEFAULT_WATERMARK_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 120" width="500" height="120">
-  <defs>
-    <linearGradient id="logo-grad" x1="0%" y1="0%" x2="100%" y2="0%">
-      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.95" />
-      <stop offset="100%" stop-color="#ffffff" stop-opacity="0.75" />
-    </linearGradient>
-    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
-      <dropShadow dx="2" dy="2" stdDeviation="2.5" flood-color="#000000" flood-opacity="0.5"/>
-    </filter>
-  </defs>
-  <g filter="url(#shadow)">
-    <path d="M 35,85 L 35,35 L 55,62 L 75,35 L 75,85" fill="none" stroke="url(#logo-grad)" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" />
-    <circle cx="55" cy="30" r="4.5" fill="#ffffff" />
-    <text x="105" y="62" font-family="'Inter', 'Helvetica Neue', sans-serif" font-size="40" font-weight="900" letter-spacing="3" fill="url(#logo-grad)">MOROSINI</text>
-    <text x="107" y="88" font-family="'JetBrains Mono', 'Courier New', monospace" font-size="15" font-weight="600" letter-spacing="7" fill="#ffffff" opacity="0.85">STUDIO CREATIVE</text>
-  </g>
-</svg>`;
-
-const DEFAULT_WATERMARK_URL = `data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(DEFAULT_WATERMARK_SVG)))}`;
+// --- DEFAULT LOGO ---
+const DEFAULT_WATERMARK_URL = "https://images.weserv.nl/?url=https%3A%2F%2Flebilleteco.com%2Fwp-content%2Fuploads%2F2026%2F07%2FNouveau-projet-1.png";
 
 
 // --- HELPERS ---
@@ -372,11 +354,11 @@ const WatermarkSelector: React.FC<{
           <div className="bg-neutral-800 rounded p-1.5 max-w-full overflow-hidden flex items-center justify-center shadow-inner">
             <img 
               src={DEFAULT_WATERMARK_URL} 
-              alt="Logo Morosini" 
+              alt="Logo Le Billet Éco" 
               className="max-h-12 h-auto object-contain" 
             />
           </div>
-          <span className="text-[10px] text-gray-500 mt-1.5 font-medium">Logo premium vectoriel pré-chargé</span>
+          <span className="text-[10px] text-gray-500 mt-1.5 font-medium">Logo officiel Le Billet Éco pré-chargé</span>
         </div>
       ) : (
         <ImageUploader 
@@ -619,6 +601,9 @@ const App: React.FC = () => {
   const loadImage = (src: string): Promise<HTMLImageElement> => {
     return new Promise((resolve, reject) => {
       const img = new Image();
+      if (src.startsWith('http') || src.startsWith('//')) {
+        img.crossOrigin = 'anonymous';
+      }
       const timeout = setTimeout(() => {
         img.src = '';
         reject(new Error("Le chargement de l'image a expiré (timeout)."));
@@ -703,7 +688,7 @@ const App: React.FC = () => {
     const originalName = imgItem.name;
     const lastDot = originalName.lastIndexOf('.');
     const baseName = lastDot !== -1 ? originalName.substring(0, lastDot) : originalName;
-    a.download = `Morosini - ${baseName}.png`;
+    a.download = `Le Billet Éco - ${baseName}.png`;
 
     document.body.appendChild(a);
     a.click();
