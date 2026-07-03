@@ -56,6 +56,13 @@ interface WatermarkState {
     scale: number;
 }
 
+interface ImageItem {
+    id: string;
+    file: File;
+    url: string;
+    name: string;
+}
+
 const POSITIONS: { id: WatermarkPosition; label: string }[] = [
     { id: 'top-left', label: 'Haut Gauche' },
     { id: 'top-right', label: 'Haut Droite' },
@@ -67,9 +74,30 @@ const POSITIONS: { id: WatermarkPosition; label: string }[] = [
 
 const INITIAL_STATE: WatermarkState = {
     position: 'bottom-right',
-    opacity: 100,
-    scale: 15,
+    opacity: 60, // Default to 60 as requested
+    scale: 18,  // Default to 18 as requested
 };
+
+// --- DEFAULT LOGO (SVG) ---
+const DEFAULT_WATERMARK_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 120" width="500" height="120">
+  <defs>
+    <linearGradient id="logo-grad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.95" />
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0.75" />
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <dropShadow dx="2" dy="2" stdDeviation="2.5" flood-color="#000000" flood-opacity="0.5"/>
+    </filter>
+  </defs>
+  <g filter="url(#shadow)">
+    <path d="M 35,85 L 35,35 L 55,62 L 75,35 L 75,85" fill="none" stroke="url(#logo-grad)" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" />
+    <circle cx="55" cy="30" r="4.5" fill="#ffffff" />
+    <text x="105" y="62" font-family="'Inter', 'Helvetica Neue', sans-serif" font-size="40" font-weight="900" letter-spacing="3" fill="url(#logo-grad)">MOROSINI</text>
+    <text x="107" y="88" font-family="'JetBrains Mono', 'Courier New', monospace" font-size="15" font-weight="600" letter-spacing="7" fill="#ffffff" opacity="0.85">STUDIO CREATIVE</text>
+  </g>
+</svg>`;
+
+const DEFAULT_WATERMARK_URL = `data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(DEFAULT_WATERMARK_SVG)))}`;
 
 
 // --- HELPERS ---
@@ -131,14 +159,14 @@ const ImageUploader: React.FC<{
 
   return (
     <div className="w-full flex flex-col items-center">
-      <h3 className="text-md font-medium text-gray-700 mb-2">{title}</h3>
-      <label htmlFor={id} className="w-full h-48 border-2 border-dashed border-gray-300 rounded-lg flex justify-center items-center cursor-pointer hover:border-indigo-500 hover:bg-gray-50 transition-colors duration-300 overflow-hidden">
+      {title && <h3 className="text-md font-medium text-gray-700 mb-2">{title}</h3>}
+      <label htmlFor={id} className="w-full h-32 border-2 border-dashed border-gray-300 rounded-lg flex justify-center items-center cursor-pointer hover:border-indigo-500 hover:bg-gray-50 transition-colors duration-300 overflow-hidden bg-gray-55/40">
         {imageUrl ? (
-          <img src={imageUrl} alt="Aperçu" className="h-full w-full object-cover" />
+          <img src={imageUrl} alt="Aperçu" className="h-full w-full object-contain p-2" />
         ) : (
           <div className="text-center text-gray-500 p-4">
-            <UploadIcon className="w-10 h-10 mx-auto" />
-            <p className="mt-1 text-sm">Cliquez pour choisir</p>
+            <UploadIcon className="w-8 h-8 mx-auto" />
+            <p className="mt-1 text-xs font-medium">Cliquez pour choisir</p>
           </div>
         )}
       </label>
@@ -153,54 +181,289 @@ const ImageUploader: React.FC<{
   );
 };
 
+const MultiImageUploader: React.FC<{
+  images: ImageItem[];
+  selectedId: string | null;
+  onSelect: (id: string) => void;
+  onRemove: (id: string) => void;
+  onAddImages: (files: FileList | null) => void;
+}> = ({ images, selectedId, onSelect, onRemove, onAddImages }) => {
+  const [isDragOver, setIsDragOver] = useState(false);
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(true);
+  };
+
+  const handleDragLeave = () => {
+    setIsDragOver(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+    onAddImages(e.dataTransfer.files);
+  };
+
+  return (
+    <div className="w-full flex flex-col">
+      <h3 className="text-md font-medium text-gray-700 mb-2">1. Image(s) principale(s)</h3>
+      
+      {images.length === 0 ? (
+        <div 
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+          className={`w-full h-32 border-2 border-dashed rounded-lg flex flex-col justify-center items-center cursor-pointer transition-all duration-300 ${
+            isDragOver ? 'border-indigo-600 bg-indigo-50 scale-[1.01]' : 'border-gray-300 hover:border-indigo-500 hover:bg-gray-50'
+          }`}
+          onClick={() => document.getElementById('multi-file-input')?.click()}
+        >
+          <UploadIcon className="w-8 h-8 text-gray-400 mx-auto mb-1" />
+          <p className="text-xs text-gray-600 font-semibold text-center px-2">Déposez des images ou cliquez pour choisir</p>
+          <p className="text-[10px] text-gray-400 mt-0.5">Plus de 8 images supportées</p>
+        </div>
+      ) : (
+        <div className="border border-gray-200 rounded-lg p-2.5 bg-gray-50 flex flex-col space-y-2">
+          <div className="flex justify-between items-center text-xs text-gray-500 font-medium">
+            <span>{images.length} image{images.length > 1 ? 's' : ''} chargée{images.length > 1 ? 's' : ''}</span>
+            <button 
+              type="button"
+              onClick={() => document.getElementById('multi-file-input')?.click()}
+              className="text-indigo-600 hover:text-indigo-800 flex items-center gap-1 font-semibold"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-3 h-3">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+              </svg>
+              Ajouter
+            </button>
+          </div>
+          
+          <div className="grid grid-cols-4 gap-1.5 max-h-32 overflow-y-auto pr-0.5">
+            {images.map((img) => (
+              <div 
+                key={img.id}
+                className={`relative aspect-square rounded-md overflow-hidden border-2 cursor-pointer group transition-all ${
+                  selectedId === img.id ? 'border-indigo-600 ring-2 ring-indigo-100' : 'border-transparent hover:border-gray-300'
+                }`}
+                onClick={() => onSelect(img.id)}
+              >
+                <img src={img.url} alt={img.name} className="w-full h-full object-cover" />
+                
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onRemove(img.id);
+                  }}
+                  className="absolute top-0.5 right-0.5 bg-red-600 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity hover:bg-red-700 shadow"
+                  title="Supprimer"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-2.5 h-2.5">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+                
+                {selectedId === img.id && (
+                  <div className="absolute bottom-0 inset-x-0 bg-indigo-600/80 text-white text-[9px] text-center py-0.5 font-bold">
+                    Actif
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      
+      <input
+        type="file"
+        id="multi-file-input"
+        accept="image/png, image/jpeg, image/webp"
+        multiple
+        className="hidden"
+        onChange={(e) => {
+          onAddImages(e.target.files);
+          e.target.value = '';
+        }}
+      />
+    </div>
+  );
+};
+
+const WatermarkSelector: React.FC<{
+  watermarkType: 'default' | 'custom';
+  onTypeChange: (type: 'default' | 'custom') => void;
+  customWatermarkUrl: string | null;
+  onCustomWatermarkChange: (file: File | null) => void;
+}> = ({ watermarkType, onTypeChange, customWatermarkUrl, onCustomWatermarkChange }) => {
+  return (
+    <div className="w-full flex flex-col">
+      <h3 className="text-md font-medium text-gray-700 mb-2">2. Filigrane</h3>
+      
+      <div className="flex bg-gray-100 p-1 rounded-lg mb-2">
+        <button
+          type="button"
+          onClick={() => onTypeChange('default')}
+          className={`flex-1 py-1.5 text-xs font-semibold rounded-md transition-all ${
+            watermarkType === 'default' 
+              ? 'bg-white text-indigo-600 shadow-sm' 
+              : 'text-gray-600 hover:text-gray-900'
+          }`}
+        >
+          Logo par défaut
+        </button>
+        <button
+          type="button"
+          onClick={() => onTypeChange('custom')}
+          className={`flex-1 py-1.5 text-xs font-semibold rounded-md transition-all ${
+            watermarkType === 'custom' 
+              ? 'bg-white text-indigo-600 shadow-sm' 
+              : 'text-gray-600 hover:text-gray-900'
+          }`}
+        >
+          Logo personnalisé
+        </button>
+      </div>
+
+      {watermarkType === 'default' ? (
+        <div className="w-full h-32 border border-gray-200 rounded-lg flex flex-col justify-center items-center bg-gray-50 p-2 text-center">
+          <div className="bg-neutral-800 rounded p-1.5 max-w-full overflow-hidden flex items-center justify-center shadow-inner">
+            <img 
+              src={DEFAULT_WATERMARK_URL} 
+              alt="Logo Morosini" 
+              className="max-h-12 h-auto object-contain" 
+            />
+          </div>
+          <span className="text-[10px] text-gray-500 mt-1.5 font-medium">Logo premium vectoriel pré-chargé</span>
+        </div>
+      ) : (
+        <ImageUploader 
+          id="custom-watermark-upload" 
+          title="" 
+          onImageChange={onCustomWatermarkChange} 
+          imageUrl={customWatermarkUrl}
+        />
+      )}
+    </div>
+  );
+};
+
 const LivePreview: React.FC<{
-    mainImageUrl: string | null;
+    images: ImageItem[];
+    selectedId: string | null;
+    onSelect: (id: string) => void;
     watermarkUrl: string | null;
     watermarkState: WatermarkState;
     previewZoom: number;
     onZoomIn: () => void;
     onZoomOut: () => void;
     onResetZoom: () => void;
-}> = ({ mainImageUrl, watermarkUrl, watermarkState, previewZoom, onZoomIn, onZoomOut, onResetZoom }) => {
-    if (!mainImageUrl) {
+}> = ({ images, selectedId, onSelect, watermarkUrl, watermarkState, previewZoom, onZoomIn, onZoomOut, onResetZoom }) => {
+    const activeIndex = images.findIndex(img => img.id === selectedId);
+    const activeImage = images[activeIndex] || null;
+
+    if (images.length === 0 || !activeImage) {
         return (
-            <div className="w-full h-full bg-gray-200 rounded-lg flex items-center justify-center text-gray-500 shadow-inner">
-                <p>L'aperçu apparaîtra ici.</p>
+            <div className="w-full h-full bg-gray-100 rounded-lg flex items-center justify-center text-gray-400 border border-gray-200 p-8 min-h-[300px]">
+                <div className="text-center">
+                    <svg className="mx-auto h-12 w-12 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                        <path vectorEffect="non-scaling-stroke" strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                    <p className="mt-2 text-sm font-medium">L'aperçu apparaîtra ici.</p>
+                </div>
             </div>
         )
     }
 
+    const handlePrev = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        const prevIndex = (activeIndex - 1 + images.length) % images.length;
+        onSelect(images[prevIndex].id);
+    };
+
+    const handleNext = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        const nextIndex = (activeIndex + 1) % images.length;
+        onSelect(images[nextIndex].id);
+    };
+
     return (
-        <div className="relative w-full h-full bg-gray-200 rounded-lg overflow-hidden shadow-inner">
-             <div 
-                className="w-full h-full transition-transform duration-200 ease-in-out"
+        <div className="relative w-full h-full bg-gray-100 rounded-lg overflow-hidden border border-gray-200 flex justify-center items-center min-h-[340px] group">
+            <div 
+                className="w-full h-full transition-transform duration-200 ease-in-out flex items-center justify-center"
                 style={{ transform: `scale(${previewZoom})` }}
             >
-                <div className="relative w-full h-full">
+                <div className="relative max-w-full max-h-full p-4">
                     <img 
-                        src={mainImageUrl} 
-                        alt="Aperçu de l'image principale" 
-                        className="w-full h-full object-cover" 
+                        src={activeImage.url} 
+                        alt={activeImage.name} 
+                        className="max-h-[360px] w-auto object-contain select-none shadow-sm rounded bg-white" 
                     />
                     {watermarkUrl && (
                         <img 
                             src={watermarkUrl}
-                            alt="Aperçu du filigrane"
+                            alt="Filigrane"
                             style={getWatermarkPreviewStyle(watermarkState)}
+                            className="select-none pointer-events-none"
                         />
                     )}
                 </div>
             </div>
 
-            <div className="absolute bottom-3 right-3 z-10 flex items-center bg-white/80 backdrop-blur-sm rounded-lg shadow-md p-1 space-x-1">
-                <button onClick={onZoomOut} title="Zoom Arrière" className="p-2 rounded-md hover:bg-gray-200 transition-colors text-gray-600 hover:text-gray-800 disabled:opacity-50" disabled={previewZoom <= 0.2}>
-                    <ZoomOutIcon className="w-5 h-5" />
+            {images.length > 1 && (
+                <>
+                    {/* Left Slide Arrow */}
+                    <button
+                        onClick={handlePrev}
+                        className="absolute left-3 top-1/2 -translate-y-1/2 z-20 bg-black/60 hover:bg-black/80 text-white p-2 rounded-full transition-all focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 shadow-md opacity-0 group-hover:opacity-100 duration-200"
+                        title="Image Précédente"
+                    >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+                        </svg>
+                    </button>
+
+                    {/* Right Slide Arrow */}
+                    <button
+                        onClick={handleNext}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 z-20 bg-black/60 hover:bg-black/80 text-white p-2 rounded-full transition-all focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 shadow-md opacity-0 group-hover:opacity-100 duration-200"
+                        title="Image Suivante"
+                    >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                        </svg>
+                    </button>
+
+                    {/* Active slide badge */}
+                    <div className="absolute top-3 left-3 z-10 bg-black/70 backdrop-blur-sm text-white text-[11px] px-3 py-1 rounded-full font-medium shadow flex items-center gap-1.5 select-none">
+                        <span className="w-2 h-2 rounded-full bg-indigo-400 animate-pulse"></span>
+                        Aperçu filigrane &bull; {activeIndex + 1} / {images.length}
+                    </div>
+
+                    {/* Navigation Dots Indicator */}
+                    <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-10 flex space-x-1.5 bg-black/55 backdrop-blur-sm px-2.5 py-1.5 rounded-full shadow max-w-[90%] overflow-x-auto scrollbar-none">
+                        {images.map((img, idx) => (
+                            <button
+                                key={img.id}
+                                onClick={(e) => { e.stopPropagation(); onSelect(img.id); }}
+                                className={`w-2 h-2 rounded-full transition-all shrink-0 ${idx === activeIndex ? 'bg-white scale-125' : 'bg-white/40 hover:bg-white/80'}`}
+                                title={`Image ${idx + 1}: ${img.name}`}
+                            />
+                        ))}
+                    </div>
+                </>
+            )}
+
+            {/* Zoom Controls */}
+            <div className="absolute bottom-3 right-3 z-10 flex items-center bg-white/90 backdrop-blur-sm rounded-lg shadow-md p-1 space-x-1 border border-gray-200">
+                <button onClick={onZoomOut} title="Zoom Arrière" className="p-1.5 rounded hover:bg-gray-100 transition-colors text-gray-600 hover:text-gray-800 disabled:opacity-30" disabled={previewZoom <= 0.4}>
+                    <ZoomOutIcon className="w-4 h-4" />
                 </button>
-                <button onClick={onResetZoom} title="Réinitialiser" className="p-2 rounded-md hover:bg-gray-200 transition-colors text-gray-600 hover:text-gray-800 disabled:opacity-50" disabled={previewZoom === 1}>
-                    <FitScreenIcon className="w-5 h-5" />
+                <button onClick={onResetZoom} title="Réinitialiser" className="p-1.5 rounded hover:bg-gray-100 transition-colors text-gray-600 hover:text-gray-800 disabled:opacity-30" disabled={previewZoom === 1}>
+                    <FitScreenIcon className="w-4 h-4" />
                 </button>
-                <button onClick={onZoomIn} title="Zoom Avant" className="p-2 rounded-md hover:bg-gray-200 transition-colors text-gray-600 hover:text-gray-800 disabled:opacity-50" disabled={previewZoom >= 3}>
-                    <ZoomInIcon className="w-5 h-5" />
+                <button onClick={onZoomIn} title="Zoom Avant" className="p-1.5 rounded hover:bg-gray-100 transition-colors text-gray-600 hover:text-gray-800 disabled:opacity-30" disabled={previewZoom >= 3}>
+                    <ZoomInIcon className="w-4 h-4" />
                 </button>
             </div>
         </div>
@@ -208,17 +471,35 @@ const LivePreview: React.FC<{
 }
 
 const App: React.FC = () => {
-  const [mainImage, setMainImage] = useState<File | null>(null);
-  const [watermark, setWatermark] = useState<File | null>(null);
+  const [mainImages, setMainImages] = useState<ImageItem[]>([]);
+  const [selectedImageId, setSelectedImageId] = useState<string | null>(null);
+  const [watermarkType, setWatermarkType] = useState<'default' | 'custom'>('default');
+  const [customWatermarkFile, setCustomWatermarkFile] = useState<File | null>(null);
+  
   const [history, setHistory] = useState<WatermarkState[]>([INITIAL_STATE]);
   const [historyIndex, setHistoryIndex] = useState(0);
   const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [batchProgress, setBatchProgress] = useState<{ current: number; total: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [downloadCount, setDownloadCount] = useState<number>(0);
   const [previewZoom, setPreviewZoom] = useState(1);
 
-  const mainImageUrl = useMemo(() => mainImage ? URL.createObjectURL(mainImage) : null, [mainImage]);
-  const watermarkUrl = useMemo(() => watermark ? URL.createObjectURL(watermark) : null, [watermark]);
+  const selectedImage = useMemo(() => {
+    return mainImages.find(img => img.id === selectedImageId) || null;
+  }, [mainImages, selectedImageId]);
+
+  const mainImageUrl = selectedImage ? selectedImage.url : null;
+  
+  const customWatermarkUrl = useMemo(() => {
+    return customWatermarkFile ? URL.createObjectURL(customWatermarkFile) : null;
+  }, [customWatermarkFile]);
+
+  const watermarkUrl = useMemo(() => {
+    if (watermarkType === 'default') {
+      return DEFAULT_WATERMARK_URL;
+    }
+    return customWatermarkUrl;
+  }, [watermarkType, customWatermarkUrl]);
 
   const currentState = history[historyIndex];
   const canUndo = historyIndex > 0;
@@ -236,116 +517,220 @@ const App: React.FC = () => {
   const handleRedo = () => { if (canRedo) setHistoryIndex(historyIndex + 1) };
 
   const handleZoomIn = () => setPreviewZoom(prev => Math.min(prev + 0.1, 3));
-  const handleZoomOut = () => setPreviewZoom(prev => Math.max(prev - 0.2, 0.2));
+  const handleZoomOut = () => setPreviewZoom(prev => Math.max(prev - 0.2, 0.4));
   const handleResetZoom = () => setPreviewZoom(1);
+
+  const handleAddImages = useCallback((files: FileList | null) => {
+    if (!files) return;
+    const newItems: ImageItem[] = [];
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      if (file.type.startsWith('image/')) {
+        const id = Math.random().toString(36).substring(2, 9);
+        const url = URL.createObjectURL(file);
+        newItems.push({
+          id,
+          file,
+          url,
+          name: file.name
+        });
+      }
+    }
+    setMainImages(prev => {
+      const updated = [...prev, ...newItems];
+      if (!selectedImageId && updated.length > 0) {
+        setSelectedImageId(updated[0].id);
+      }
+      return updated;
+    });
+  }, [selectedImageId]);
+
+  const handleRemoveImage = useCallback((id: string) => {
+    setMainImages(prev => {
+      const target = prev.find(img => img.id === id);
+      if (target) {
+        URL.revokeObjectURL(target.url);
+      }
+      const updated = prev.filter(img => img.id !== id);
+      if (selectedImageId === id) {
+        setSelectedImageId(updated.length > 0 ? updated[0].id : null);
+      }
+      return updated;
+    });
+  }, [selectedImageId]);
 
   const loadImage = (src: string): Promise<HTMLImageElement> => {
     return new Promise((resolve, reject) => {
       const img = new Image();
-      img.onload = () => resolve(img);
-      img.onerror = (err) => reject(err);
+      const timeout = setTimeout(() => {
+        img.src = '';
+        reject(new Error("Le chargement de l'image a expiré (timeout)."));
+      }, 12000);
+
+      img.onload = () => {
+        clearTimeout(timeout);
+        resolve(img);
+      };
+      img.onerror = (err) => {
+        clearTimeout(timeout);
+        reject(new Error("Erreur de décodage de l'image ou format invalide."));
+      };
       img.src = src;
     });
   };
 
-  const handleMergeAndDownload = async () => {
-    if (!mainImage || !watermark || !mainImageUrl || !watermarkUrl) return;
+  const generateWatermarkedBlob = async (imgItem: ImageItem, state: WatermarkState): Promise<Blob> => {
+    if (!watermarkUrl) throw new Error("Aucun filigrane disponible.");
+    const mainImg = await loadImage(imgItem.url);
+    const watermarkImg = await loadImage(watermarkUrl);
+
+    const canvas = document.createElement('canvas');
+    canvas.width = mainImg.width;
+    canvas.height = mainImg.height;
+    const ctx = canvas.getContext('2d');
+
+    if (!ctx) throw new Error("Impossible de créer le contexte de dessin 2D.");
+
+    ctx.drawImage(mainImg, 0, 0);
+    ctx.globalAlpha = state.opacity / 100;
+
+    const padding = canvas.width * 0.02;
+    const watermarkAspectRatio = watermarkImg.width / watermarkImg.height;
+    let wmWidth = canvas.width * (state.scale / 100);
+    let wmHeight = wmWidth / watermarkAspectRatio;
+
+    let x = 0, y = 0;
+    switch (state.position) {
+      case 'top-left': x = padding; y = padding; break;
+      case 'top-right': x = canvas.width - wmWidth - padding; y = padding; break;
+      case 'bottom-left': x = padding; y = canvas.height - wmHeight - padding; break;
+      case 'bottom-right': x = canvas.width - wmWidth - padding; y = canvas.height - wmHeight - padding; break;
+      case 'bottom-center': x = (canvas.width - wmWidth) / 2; y = canvas.height - wmHeight - padding; break;
+      case 'center': x = (canvas.width - wmWidth) / 2; y = (canvas.height - wmHeight) / 2; break;
+    }
+    
+    ctx.drawImage(watermarkImg, x, y, wmWidth, wmHeight);
+    
+    return new Promise((resolve, reject) => {
+      canvas.toBlob((blob) => {
+        if (!blob) {
+          reject(new Error("La génération de l'image finale a échoué."));
+          return;
+        }
+        resolve(blob);
+      }, 'image/png', 0.95);
+    });
+  };
+
+  const processSingleImage = async (imgItem: ImageItem, state: WatermarkState): Promise<void> => {
+    const blob = await generateWatermarkedBlob(imgItem, state);
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    
+    const originalName = imgItem.name;
+    const lastDot = originalName.lastIndexOf('.');
+    const baseName = lastDot !== -1 ? originalName.substring(0, lastDot) : originalName;
+    a.download = `Morosini - ${baseName}.png`;
+
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 100);
+  };
+
+  const handleDownloadSelected = async () => {
+    if (!selectedImage || !watermarkUrl) return;
 
     setIsLoading(true);
     setError(null);
 
     try {
-      const mainImg = await loadImage(mainImageUrl);
-      const watermarkImg = await loadImage(watermarkUrl);
-
-      const canvas = document.createElement('canvas');
-      canvas.width = mainImg.width;
-      canvas.height = mainImg.height;
-      const ctx = canvas.getContext('2d');
-
-      if (!ctx) throw new Error("Impossible d'obtenir le contexte du canvas.");
-
-      ctx.drawImage(mainImg, 0, 0);
-      ctx.globalAlpha = currentState.opacity / 100;
-
-      const padding = canvas.width * 0.02;
-      const watermarkAspectRatio = watermarkImg.width / watermarkImg.height;
-      let wmWidth = canvas.width * (currentState.scale / 100);
-      let wmHeight = wmWidth / watermarkAspectRatio;
-
-      let x = 0, y = 0;
-      switch (currentState.position) {
-        case 'top-left': x = padding; y = padding; break;
-        case 'top-right': x = canvas.width - wmWidth - padding; y = padding; break;
-        case 'bottom-left': x = padding; y = canvas.height - wmHeight - padding; break;
-        case 'bottom-right': x = canvas.width - wmWidth - padding; y = canvas.height - wmHeight - padding; break;
-        case 'bottom-center': x = (canvas.width - wmWidth) / 2; y = canvas.height - wmHeight - padding; break;
-        case 'center': x = (canvas.width - wmWidth) / 2; y = (canvas.height - wmHeight) / 2; break;
-      }
-      
-      ctx.drawImage(watermarkImg, x, y, wmWidth, wmHeight);
-      
-      canvas.toBlob((blob) => {
-        if (!blob) {
-          setError("Erreur lors de la création de l'image finale.");
-          setIsLoading(false);
-          return;
-        }
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        
-        const newDownloadCount = downloadCount + 1;
-        setDownloadCount(newDownloadCount);
-        a.download = `Morosini - ${newDownloadCount}.png`;
-
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-        setIsLoading(false);
-      }, 'image/png', 0.95);
+      await processSingleImage(selectedImage, currentState);
+      setDownloadCount(prev => prev + 1);
     } catch (err) {
       console.error(err);
-      setError("Une erreur est survenue lors du traitement des images.");
+      setError("Erreur : " + (err instanceof Error ? err.message : String(err)));
+    } finally {
       setIsLoading(false);
     }
   };
+
+  const handleDownloadAll = async () => {
+    if (mainImages.length === 0 || !watermarkUrl) return;
+
+    setIsLoading(true);
+    setError(null);
+    setBatchProgress({ current: 0, total: mainImages.length });
+
+    try {
+      for (let i = 0; i < mainImages.length; i++) {
+        setBatchProgress({ current: i + 1, total: mainImages.length });
+        await processSingleImage(mainImages[i], currentState);
+        
+        // Brief sleep to avoid browser rate limits or blocking sequential triggers
+        if (i < mainImages.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 400));
+        }
+      }
+      setDownloadCount(prev => prev + mainImages.length);
+    } catch (err) {
+      console.error(err);
+      setError("Erreur lors du traitement par lot : " + (err instanceof Error ? err.message : String(err)));
+    } finally {
+      setIsLoading(false);
+      setBatchProgress(null);
+    }
+  };
+
+
 
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4 sm:p-6 lg:p-8 font-sans">
       <div className="w-full max-w-6xl bg-white rounded-xl shadow-lg p-6 sm:p-8">
         <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold text-gray-800">Filigrane Facile</h1>
-          <p className="text-gray-500 mt-2">Ajoutez un filigrane à votre image avec une prévisualisation en direct.</p>
+          <h1 className="text-4xl font-extrabold text-gray-900 tracking-tight">Filigrane Facile</h1>
+          <p className="text-gray-500 mt-2 text-md">Ajoutez un filigrane à vos images avec une prévisualisation en direct et un traitement par lot.</p>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-12">
           {/* --- LEFT COLUMN: UPLOAD & CONTROLS --- */}
-          <div className="flex flex-col space-y-8">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                <ImageUploader id="main-image-upload" title="1. Image principale" onImageChange={setMainImage} imageUrl={mainImageUrl}/>
-                <ImageUploader id="watermark-upload" title="2. Filigrane" onImageChange={setWatermark} imageUrl={watermarkUrl}/>
+          <div className="flex flex-col space-y-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <MultiImageUploader 
+                  images={mainImages} 
+                  selectedId={selectedImageId} 
+                  onSelect={setSelectedImageId} 
+                  onRemove={handleRemoveImage} 
+                  onAddImages={handleAddImages}
+                />
+                
+                <WatermarkSelector 
+                  watermarkType={watermarkType} 
+                  onTypeChange={setWatermarkType} 
+                  customWatermarkUrl={customWatermarkUrl} 
+                  onCustomWatermarkChange={setCustomWatermarkFile}
+                />
             </div>
             
-            <div className="border-t pt-6">
+            <div className="border-t pt-5">
               <div className="flex justify-between items-center mb-4">
-                <h3 className="text-lg font-medium text-gray-700">3. Personnalisation</h3>
-                <div className="flex space-x-2">
-                    <button onClick={handleUndo} disabled={!canUndo} className="p-2 rounded-md bg-gray-200 hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"><UndoIcon className="w-5 h-5" /></button>
-                    <button onClick={handleRedo} disabled={!canRedo} className="p-2 rounded-md bg-gray-200 hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"><RedoIcon className="w-5 h-5" /></button>
+                <h3 className="text-md font-bold text-gray-800 uppercase tracking-wider">3. Personnalisation</h3>
+                <div className="flex space-x-1.5">
+                    <button onClick={handleUndo} disabled={!canUndo} className="p-1.5 rounded bg-gray-100 hover:bg-gray-200 text-gray-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors" title="Annuler"><UndoIcon className="w-4 h-4" /></button>
+                    <button onClick={handleRedo} disabled={!canRedo} className="p-1.5 rounded bg-gray-100 hover:bg-gray-200 text-gray-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors" title="Rétablir"><RedoIcon className="w-4 h-4" /></button>
                 </div>
               </div>
               
-              <div className="space-y-6">
+              <div className="space-y-5">
                 <div>
-                    <label className="block text-md font-medium text-gray-600 mb-2">Position</label>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">Position du filigrane</label>
+                    <div className="grid grid-cols-3 gap-1.5">
                         {POSITIONS.map(pos => (
                             <div key={pos.id}>
                                 <input type="radio" id={pos.id} name="position" value={pos.id} checked={currentState.position === pos.id} onChange={() => updateWatermarkState({ position: pos.id })} className="hidden peer" />
-                                <label htmlFor={pos.id} className="inline-flex items-center justify-center w-full p-3 text-gray-500 bg-white border border-gray-200 rounded-lg cursor-pointer peer-checked:border-indigo-600 peer-checked:text-indigo-600 hover:text-gray-600 hover:bg-gray-100 transition-colors">                           
-                                    <div className="block"><div className="w-full text-sm font-semibold">{pos.label}</div></div>
+                                <label htmlFor={pos.id} className="inline-flex items-center justify-center w-full p-2 text-xs font-medium text-gray-600 bg-white border border-gray-200 rounded-lg cursor-pointer peer-checked:border-indigo-600 peer-checked:text-indigo-600 hover:bg-gray-50 transition-all text-center select-none">                           
+                                    <span>{pos.label}</span>
                                 </label>
                             </div>
                         ))}
@@ -353,47 +738,85 @@ const App: React.FC = () => {
                 </div>
 
                 <div>
-                    <label htmlFor="opacity-slider" className="block text-md font-medium text-gray-600 mb-2">Opacité: <span className="font-bold text-indigo-600">{currentState.opacity}%</span></label>
-                    <input id="opacity-slider" type="range" min="0" max="100" value={currentState.opacity} onChange={(e) => updateWatermarkState({ opacity: Number(e.target.value) })} className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-indigo-600" />
+                    <div className="flex justify-between items-center mb-1">
+                        <label htmlFor="opacity-slider" className="text-sm font-semibold text-gray-700">Opacité</label>
+                        <span className="font-bold text-sm text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded">{currentState.opacity}%</span>
+                    </div>
+                    <input id="opacity-slider" type="range" min="0" max="100" value={currentState.opacity} onChange={(e) => updateWatermarkState({ opacity: Number(e.target.value) })} className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-indigo-600" />
                 </div>
 
                 <div>
-                    <label htmlFor="scale-slider" className="block text-md font-medium text-gray-600 mb-2">Taille: <span className="font-bold text-indigo-600">{currentState.scale}%</span></label>
-                    <input id="scale-slider" type="range" min="1" max="50" value={currentState.scale} onChange={(e) => updateWatermarkState({ scale: Number(e.target.value) })} className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-indigo-600" />
+                    <div className="flex justify-between items-center mb-1">
+                        <label htmlFor="scale-slider" className="text-sm font-semibold text-gray-700">Taille du filigrane</label>
+                        <span className="font-bold text-sm text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded">{currentState.scale}%</span>
+                    </div>
+                    <input id="scale-slider" type="range" min="1" max="50" value={currentState.scale} onChange={(e) => updateWatermarkState({ scale: Number(e.target.value) })} className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-indigo-600" />
                 </div>
               </div>
             </div>
           </div>
 
-          {/* --- RIGHT COLUMN: PREVIEW --- */}
-          <div className="lg:sticky lg:top-8 h-96 lg:h-auto">
-            <h3 className="text-lg font-medium text-gray-700 mb-2 text-center lg:text-left">Aperçu en direct</h3>
-            <LivePreview 
-                mainImageUrl={mainImageUrl} 
-                watermarkUrl={watermarkUrl} 
-                watermarkState={currentState}
-                previewZoom={previewZoom}
-                onZoomIn={handleZoomIn}
-                onZoomOut={handleZoomOut}
-                onResetZoom={handleResetZoom}
-            />
-          </div>
-        </div>
-        
-        {error && (
-            <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative my-6 text-center" role="aleaxrt">
-                <span className="block sm:inline">{error}</span>
+          {/* --- RIGHT COLUMN: PREVIEW & ACTION --- */}
+          <div className="flex flex-col justify-between h-full space-y-4">
+            <div>
+              <h3 className="text-md font-bold text-gray-800 uppercase tracking-wider mb-2 text-center lg:text-left">Aperçu en direct</h3>
+              <LivePreview 
+                  images={mainImages}
+                  selectedId={selectedImageId}
+                  onSelect={setSelectedImageId}
+                  watermarkUrl={watermarkUrl} 
+                  watermarkState={currentState}
+                  previewZoom={previewZoom}
+                  onZoomIn={handleZoomIn}
+                  onZoomOut={handleZoomOut}
+                  onResetZoom={handleResetZoom}
+              />
             </div>
-        )}
+            
+            {error && (
+                <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm font-medium text-center" role="alert">
+                    <span>{error}</span>
+                </div>
+            )}
 
-        <div className="text-center mt-8 pt-8 border-t">
-          <button
-            onClick={handleMergeAndDownload}
-            disabled={!mainImage || !watermark || isLoading}
-            className="w-full max-w-md inline-flex items-center justify-center px-8 py-4 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:bg-gray-400 disabled:cursor-not-allowed transition-all duration-300 text-lg"
-          >
-            {isLoading ? (<><SpinnerIcon /><span>Traitement...</span></>) : ('4. Fusionner et Télécharger')}
-          </button>
+            {/* ACTION BUTTONS */}
+            <div className="pt-4 border-t space-y-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <button
+                  onClick={handleDownloadSelected}
+                  disabled={mainImages.length === 0 || !watermarkUrl || isLoading}
+                  className="w-full flex items-center justify-center px-4 py-3 bg-indigo-600 text-white font-semibold rounded-lg shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all text-sm"
+                >
+                  {isLoading && !batchProgress ? (
+                    <span className="flex items-center"><SpinnerIcon />Traitement...</span>
+                  ) : (
+                    "Télécharger l'image active"
+                  )}
+                </button>
+
+                <button
+                  onClick={handleDownloadAll}
+                  disabled={mainImages.length === 0 || !watermarkUrl || isLoading}
+                  className="w-full flex items-center justify-center px-4 py-3 bg-white border border-gray-300 text-gray-700 font-semibold rounded-lg shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all text-sm"
+                >
+                  {isLoading && batchProgress && !error ? (
+                    <span className="flex items-center">
+                      <SpinnerIcon />
+                      En cours ({batchProgress.current}/{batchProgress.total})...
+                    </span>
+                  ) : (
+                    `Tout télécharger un par un (${mainImages.length})`
+                  )}
+                </button>
+              </div>
+
+              {mainImages.length > 0 && (
+                <p className="text-[11px] text-gray-400 text-center font-medium">
+                  Astuce : Utilisez les flèches ou les points sur l'aperçu pour faire défiler vos photos avec leurs filigranes.
+                </p>
+              )}
+            </div>
+          </div>
         </div>
       </div>
     </div>
