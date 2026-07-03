@@ -147,7 +147,7 @@ const getWatermarkPreviewStyle = (state: WatermarkState): React.CSSProperties =>
         transition: 'all 0.2s ease-in-out',
     };
     
-    const padding = '2%';
+    const padding = '4%';
 
     switch (state.position) {
         case 'top-left':
@@ -367,11 +367,11 @@ const WatermarkSelector: React.FC<{
           <div className="bg-neutral-800 rounded p-1.5 max-w-full overflow-hidden flex items-center justify-center shadow-inner">
             <img 
               src={DEFAULT_WATERMARK_URL} 
-              alt="Logo Le Billet Éco" 
+              alt="Logo Morosini" 
               className="max-h-12 h-auto object-contain" 
             />
           </div>
-          <span className="text-[10px] text-gray-500 mt-1.5 font-medium">Logo officiel Le Billet Éco pré-chargé</span>
+          <span className="text-[10px] text-gray-500 mt-1.5 font-bold tracking-wider text-indigo-600">MOROSINI LOGO</span>
         </div>
       ) : (
         <ImageUploader 
@@ -524,6 +524,7 @@ const App: React.FC = () => {
   const [customWatermarkFile, setCustomWatermarkFile] = useState<File | null>(null);
   const [selectedPresetId, setSelectedPresetId] = useState<string>('original');
   const [selectedCategory, setSelectedCategory] = useState<string>(CATEGORIES[0]);
+  const [customCategoryText, setCustomCategoryText] = useState<string>('');
   
   const [history, setHistory] = useState<WatermarkState[]>([INITIAL_STATE]);
   const [historyIndex, setHistoryIndex] = useState(0);
@@ -532,6 +533,13 @@ const App: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [downloadCount, setDownloadCount] = useState<number>(0);
   const [previewZoom, setPreviewZoom] = useState(1);
+
+  const effectiveCategory = useMemo(() => {
+    if (selectedCategory === '__custom__') {
+      return customCategoryText.trim() || 'Personnalisé';
+    }
+    return selectedCategory;
+  }, [selectedCategory, customCategoryText]);
 
   const activePreset = useMemo(() => {
     return PRESETS.find(p => p.id === selectedPresetId) || PRESETS[0];
@@ -665,7 +673,7 @@ const App: React.FC = () => {
     
     ctx.globalAlpha = state.opacity / 100;
 
-    const padding = canvas.width * 0.02;
+    const padding = canvas.width * 0.04;
     const watermarkAspectRatio = watermarkImg.width / watermarkImg.height;
     let wmWidth = canvas.width * (state.scale / 100);
     let wmHeight = wmWidth / watermarkAspectRatio;
@@ -700,9 +708,9 @@ const App: React.FC = () => {
     a.href = url;
     
     if (index !== undefined) {
-      a.download = `Morosini - ${selectedCategory} - ${index}.png`;
+      a.download = `Morosini - ${effectiveCategory} - ${index}.png`;
     } else {
-      a.download = `Morosini - ${selectedCategory}.png`;
+      a.download = `Morosini - ${effectiveCategory}.png`;
     }
 
     document.body.appendChild(a);
@@ -829,10 +837,24 @@ const App: React.FC = () => {
                                 {category}
                             </option>
                         ))}
+                        <option value="__custom__">✨ Autre (texte personnalisé...)</option>
                     </select>
+
+                    {selectedCategory === '__custom__' && (
+                        <div className="mt-2">
+                            <input
+                                type="text"
+                                placeholder="Entrez votre catégorie personnalisée..."
+                                value={customCategoryText}
+                                onChange={(e) => setCustomCategoryText(e.target.value)}
+                                className="w-full px-3 py-2 bg-white border border-indigo-200 rounded-lg text-sm text-gray-700 font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all shadow-sm"
+                            />
+                        </div>
+                    )}
+
                     <div className="mt-2 p-2 bg-gray-50 rounded-md border border-gray-100 text-[11px] text-gray-500 font-mono break-all">
                         <span className="font-semibold text-gray-600 block mb-0.5">Aperçu du nom final :</span>
-                        Morosini - <span className="text-indigo-600 font-semibold">{selectedCategory}</span>.png
+                        Morosini - <span className="text-indigo-600 font-semibold">{effectiveCategory}</span>.png
                     </div>
                 </div>
 
