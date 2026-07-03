@@ -87,6 +87,19 @@ const PRESETS: AspectRatioPreset[] = [
     { id: '16:9', label: '16:9 (Paysage)', ratio: 16/9, description: 'Format standard paysage' },
 ];
 
+const CATEGORIES = [
+    "Acoustique",
+    "Plafond tendu",
+    "Placard sur mesure",
+    "Meuble sur mesure",
+    "Dressing",
+    "Bibliothèque",
+    "Cuisine",
+    "Rénovation cuisine",
+    "Covering",
+    "Store"
+];
+
 const INITIAL_STATE: WatermarkState = {
     position: 'bottom-right',
     opacity: 60, // Default to 60 as requested
@@ -510,6 +523,7 @@ const App: React.FC = () => {
   const [watermarkType, setWatermarkType] = useState<'default' | 'custom'>('default');
   const [customWatermarkFile, setCustomWatermarkFile] = useState<File | null>(null);
   const [selectedPresetId, setSelectedPresetId] = useState<string>('original');
+  const [selectedCategory, setSelectedCategory] = useState<string>(CATEGORIES[0]);
   
   const [history, setHistory] = useState<WatermarkState[]>([INITIAL_STATE]);
   const [historyIndex, setHistoryIndex] = useState(0);
@@ -679,16 +693,17 @@ const App: React.FC = () => {
     });
   };
 
-  const processSingleImage = async (imgItem: ImageItem, state: WatermarkState): Promise<void> => {
+  const processSingleImage = async (imgItem: ImageItem, state: WatermarkState, index?: number): Promise<void> => {
     const blob = await generateWatermarkedBlob(imgItem, state);
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
     
-    const originalName = imgItem.name;
-    const lastDot = originalName.lastIndexOf('.');
-    const baseName = lastDot !== -1 ? originalName.substring(0, lastDot) : originalName;
-    a.download = `Le Billet Éco - ${baseName}.png`;
+    if (index !== undefined) {
+      a.download = `Morosini - ${selectedCategory} - ${index}.png`;
+    } else {
+      a.download = `Morosini - ${selectedCategory}.png`;
+    }
 
     document.body.appendChild(a);
     a.click();
@@ -723,7 +738,7 @@ const App: React.FC = () => {
     try {
       for (let i = 0; i < mainImages.length; i++) {
         setBatchProgress({ current: i + 1, total: mainImages.length });
-        await processSingleImage(mainImages[i], currentState);
+        await processSingleImage(mainImages[i], currentState, i + 1);
         
         // Brief sleep to avoid browser rate limits or blocking sequential triggers
         if (i < mainImages.length - 1) {
@@ -799,6 +814,25 @@ const App: React.FC = () => {
                                 <span className="text-[9px] text-gray-400 mt-0.5 font-medium">{preset.id === 'original' ? 'Plein format' : preset.id}</span>
                             </button>
                         ))}
+                    </div>
+                </div>
+
+                <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">Catégorie pour le renommage</label>
+                    <select
+                        value={selectedCategory}
+                        onChange={(e) => setSelectedCategory(e.target.value)}
+                        className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm text-gray-700 font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all shadow-sm cursor-pointer"
+                    >
+                        {CATEGORIES.map(category => (
+                            <option key={category} value={category}>
+                                {category}
+                            </option>
+                        ))}
+                    </select>
+                    <div className="mt-2 p-2 bg-gray-50 rounded-md border border-gray-100 text-[11px] text-gray-500 font-mono break-all">
+                        <span className="font-semibold text-gray-600 block mb-0.5">Aperçu du nom final :</span>
+                        Morosini - <span className="text-indigo-600 font-semibold">{selectedCategory}</span>.png
                     </div>
                 </div>
 
